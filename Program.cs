@@ -5,12 +5,14 @@ namespace Batch_Simulator;
 internal sealed record Batch(
     int Id,
     TimeSpan ArrivalTime,
-    int MessageCount);
+    int MessageCount,
+    TimeSpan ProcessingTime);
 
 internal sealed record BatchResult(
     int Id,
     TimeSpan ArrivalTime,
     int MessageCount,
+    TimeSpan ProcessingTime,
     TimeSpan CompletionTime)
 {
     public TimeSpan Duration => CompletionTime - ArrivalTime;
@@ -20,17 +22,12 @@ internal static class QueueSimulator
 {
     public static IReadOnlyList<BatchResult> Simulate(
         int workerCount,
-        TimeSpan processingTime,
         TimeSpan startupTime,
         IEnumerable<Batch> batches)
     {
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(
             workerCount,
             0);
-
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(
-            processingTime,
-            TimeSpan.Zero);
 
         if (startupTime < TimeSpan.Zero)
         {
@@ -74,7 +71,7 @@ internal static class QueueSimulator
                     priority.AvailableAt);
 
                 var finishTime =
-                    startTime + processingTime;
+                    startTime + batch.ProcessingTime;
 
                 // The worker restarts before taking another message.
                 workers.Enqueue(
@@ -92,6 +89,7 @@ internal static class QueueSimulator
                     batch.Id,
                     batch.ArrivalTime,
                     batch.MessageCount,
+                    batch.ProcessingTime,
                     completionTime));
         }
 
@@ -117,10 +115,6 @@ internal static class Program
         var workerCount = ReadInt(
             "Number of workers: ",
             1);
-
-        var processingTime = ReadMinutes(
-            "Processing time per message (minutes): ",
-            false);
 
         var startupTime = ReadMinutes(
             "Worker startup time (minutes): ",
@@ -151,11 +145,16 @@ internal static class Program
                 1,
                 96);
 
+            var processingTime = ReadMinutes(
+                "Execution time per message in this batch (minutes): ",
+                false);
+
             batches.Add(
                 new Batch(
                     batches.Count + 1,
                     TimeSpan.FromMinutes(arrivalMinutes),
-                    messageCount));
+                    messageCount,
+                    TimeSpan.FromMinutes(processingTime)));
 
             Console.WriteLine();
         }
@@ -168,7 +167,6 @@ internal static class Program
 
         var results = QueueSimulator.Simulate(
             workerCount,
-            TimeSpan.FromMinutes(processingTime),
             TimeSpan.FromMinutes(startupTime),
             batches);
 
@@ -179,6 +177,7 @@ internal static class Program
             Console.WriteLine(
                 $"Batch {result.Id}: " +
                 $"{result.MessageCount} messages, " +
+                $"{Format(result.ProcessingTime)} per message, " +
                 $"arrives at {Format(result.ArrivalTime)}, " +
                 $"completes at {Format(result.CompletionTime)}, " +
                 $"duration {Format(result.Duration)}.");
